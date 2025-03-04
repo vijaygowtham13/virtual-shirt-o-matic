@@ -3,6 +3,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Camera, X, ArrowLeft, ArrowRight } from 'lucide-react';
 import { useTryOn } from '../context/TryOnContext';
 import { usePoseDetection, overlayShirt } from '../utils/poseDetection';
+import { useToast } from "@/hooks/use-toast";
 
 const VirtualTryOn: React.FC = () => {
   const { 
@@ -12,13 +13,16 @@ const VirtualTryOn: React.FC = () => {
     setCurrentShirtIndex,
     availableShirts,
     isPoseDetectionSupported,
-    errorMessage
+    errorMessage,
+    resetCameraError
   } = useTryOn();
   
+  const { toast } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
   const shirtImageRef = useRef<HTMLImageElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
+  const [useFallbackMode, setUseFallbackMode] = useState(false);
   
   const { canvasRef, poseData, isLoading, startDetection, stopDetection } = usePoseDetection(videoRef);
   
@@ -44,6 +48,9 @@ const VirtualTryOn: React.FC = () => {
         return;
       }
       
+      // Reset any previous errors
+      resetCameraError();
+      
       try {
         const videoStream = await navigator.mediaDevices.getUserMedia({ 
           video: { 
@@ -59,13 +66,68 @@ const VirtualTryOn: React.FC = () => {
           
           // Wait for video to start playing
           videoRef.current.onloadedmetadata = () => {
-            videoRef.current?.play();
+            videoRef.current?.play().catch(error => {
+              console.error("Error playing video:", error);
+              toast({
+                title: "Camera Error",
+                description: "There was a problem starting your camera stream. Please try again.",
+                variant: "destructive",
+              });
+            });
             startDetection();
           };
         }
       } catch (error) {
         console.error("Error accessing webcam:", error);
-        setWebcamActive(false);
+        
+        // Show toast with error
+        toast({
+          title: "Camera Not Available",
+          description: "Couldn't access your camera. Using demo mode instead.",
+          variant: "destructive",
+        });
+        
+        setUseFallbackMode(true);
+        
+        // If we can't access the camera, we'll use a fallback mode
+        if (canvasRef.current) {
+          const ctx = canvasRef.current.getContext('2d');
+          if (ctx) {
+            canvasRef.current.width = 640;
+            canvasRef.current.height = 480;
+            
+            // Draw a placeholder background
+            ctx.fillStyle = '#f0f0f0';
+            ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+            
+            // Draw a silhouette
+            ctx.fillStyle = '#d0d0d0';
+            const centerX = canvasRef.current.width / 2;
+            ctx.beginPath();
+            ctx.ellipse(centerX, 120, 50, 60, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(centerX - 80, 200);
+            ctx.lineTo(centerX + 80, 200);
+            ctx.lineTo(centerX + 100, 400);
+            ctx.lineTo(centerX - 100, 400);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Overlay the current shirt
+            if (shirtImageRef.current) {
+              const shirtWidth = 200;
+              const shirtHeight = shirtWidth * (shirtImageRef.current.height / shirtImageRef.current.width);
+              ctx.drawImage(
+                shirtImageRef.current,
+                centerX - shirtWidth / 2,
+                180,
+                shirtWidth,
+                shirtHeight
+              );
+            }
+          }
+        }
       }
     };
     
@@ -77,11 +139,48 @@ const VirtualTryOn: React.FC = () => {
         stream.getTracks().forEach(track => track.stop());
       }
     };
-  }, [isWebcamActive, startDetection, stopDetection]);
+  }, [isWebcamActive, startDetection, stopDetection, toast, resetCameraError]);
   
-  // Draw shirt on canvas
+  // Draw shirt on canvas in fallback mode
   useEffect(() => {
-    if (poseData && canvasRef.current && shirtImageRef.current) {
+    if (useFallbackMode && canvasRef.current && shirtImageRef.current) {
+      const ctx = canvasRef.current.getContext('2d');
+      if (!ctx) return;
+      
+      // Clear canvas
+      ctx.fillStyle = '#f0f0f0';
+      ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      
+      // Draw silhouette
+      ctx.fillStyle = '#d0d0d0';
+      const centerX = canvasRef.current.width / 2;
+      ctx.beginPath();
+      ctx.ellipse(centerX, 120, 50, 60, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(centerX - 80, 200);
+      ctx.lineTo(centerX + 80, 200);
+      ctx.lineTo(centerX + 100, 400);
+      ctx.lineTo(centerX - 100, 400);
+      ctx.closePath();
+      ctx.fill();
+      
+      // Draw shirt
+      const shirtWidth = 200;
+      const shirtHeight = shirtWidth * (shirtImageRef.current.height / shirtImageRef.current.width);
+      ctx.drawImage(
+        shirtImageRef.current,
+        centerX - shirtWidth / 2,
+        180,
+        shirtWidth,
+        shirtHeight
+      );
+    }
+  }, [useFallbackMode, currentShirtIndex]);
+  
+  // Draw shirt on canvas with pose detection
+  useEffect(() => {
+    if (!useFallbackMode && poseData && canvasRef.current && shirtImageRef.current) {
       const ctx = canvasRef.current.getContext('2d');
       if (!ctx) return;
       
@@ -93,7 +192,7 @@ const VirtualTryOn: React.FC = () => {
       // Overlay shirt
       overlayShirt(canvasRef.current, poseData, shirtImageRef.current);
     }
-  }, [poseData]);
+  }, [poseData, useFallbackMode]);
   
   const toggleFullscreen = () => {
     setIsFullscreen(!isFullscreen);
@@ -130,15 +229,14 @@ const VirtualTryOn: React.FC = () => {
               Experience clothes virtually before you buy. Our AI will overlay selected items on your webcam feed in real-time.
             </p>
             
-            {!isPoseDetectionSupported ? (
+            {errorMessage && !isPoseDetectionSupported ? (
               <div className="bg-destructive/10 p-4 rounded-lg text-sm text-destructive">
-                {errorMessage || "Your device doesn't support this feature."}
+                {errorMessage}
               </div>
             ) : (
               <button 
                 onClick={() => setWebcamActive(true)}
                 className="button-primary w-full"
-                disabled={!isPoseDetectionSupported}
               >
                 Start Camera
               </button>
@@ -158,7 +256,7 @@ const VirtualTryOn: React.FC = () => {
               className="w-full h-full object-cover"
             />
             
-            {isLoading && (
+            {isLoading && !useFallbackMode && (
               <div className="absolute inset-0 bg-background/50 backdrop-blur-sm flex items-center justify-center">
                 <div className="space-y-4 text-center">
                   <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-rotation mx-auto"></div>
@@ -208,13 +306,22 @@ const VirtualTryOn: React.FC = () => {
               </button>
               
               <button
-                onClick={() => setWebcamActive(false)}
+                onClick={() => {
+                  setWebcamActive(false);
+                  setUseFallbackMode(false);
+                }}
                 className="p-3 bg-background/80 backdrop-blur-sm rounded-full border border-border/50 hover:bg-background transition-colors"
               >
                 <X className="w-4 h-4" />
                 <span className="sr-only">Stop Camera</span>
               </button>
             </div>
+            
+            {useFallbackMode && (
+              <div className="absolute top-6 left-6 px-4 py-2 bg-amber-500/80 text-white rounded-full text-sm">
+                Demo Mode (No Camera)
+              </div>
+            )}
           </>
         )}
       </div>

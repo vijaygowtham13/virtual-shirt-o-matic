@@ -1,5 +1,6 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { useToast } from "@/hooks/use-toast";
 
 interface TryOnContextType {
   isWebcamActive: boolean;
@@ -10,6 +11,7 @@ interface TryOnContextType {
   isLoading: boolean;
   isPoseDetectionSupported: boolean;
   errorMessage: string | null;
+  resetCameraError: () => void;
 }
 
 const TryOnContext = createContext<TryOnContextType | undefined>(undefined);
@@ -32,6 +34,7 @@ export const TryOnProvider: React.FC<TryOnProviderProps> = ({ children }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isPoseDetectionSupported, setIsPoseDetectionSupported] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const { toast } = useToast();
   
   // In a real app, these would be loaded from an API
   const [availableShirts] = useState([
@@ -42,6 +45,11 @@ export const TryOnProvider: React.FC<TryOnProviderProps> = ({ children }) => {
     "/shirts/shirt5.png",
   ]);
 
+  const resetCameraError = () => {
+    setErrorMessage(null);
+    setIsPoseDetectionSupported(true);
+  };
+
   // Check browser support for webcam
   useEffect(() => {
     const checkMediaDevices = async () => {
@@ -49,26 +57,36 @@ export const TryOnProvider: React.FC<TryOnProviderProps> = ({ children }) => {
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
           setIsPoseDetectionSupported(false);
           setErrorMessage("Your browser doesn't support webcam access.");
+          
+          toast({
+            title: "Camera Not Supported",
+            description: "Your browser doesn't support webcam access.",
+            variant: "destructive",
+          });
           return;
         }
         
-        // Test if we can access the camera
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        
-        // Clean up the test stream
-        stream.getTracks().forEach(track => track.stop());
-        
+        // Here we're just checking if the browser supports getUserMedia
+        // We'll handle actual camera permissions in the VirtualTryOn component
         setIsPoseDetectionSupported(true);
         setErrorMessage(null);
       } catch (error) {
         console.error("Camera access error:", error);
         setIsPoseDetectionSupported(false);
-        setErrorMessage("Unable to access camera. Please allow camera permissions.");
+        
+        const errorMessage = "Unable to access camera. Please ensure you have a webcam connected and allow camera permissions.";
+        setErrorMessage(errorMessage);
+        
+        toast({
+          title: "Camera Access Error",
+          description: errorMessage,
+          variant: "destructive",
+        });
       }
     };
 
     checkMediaDevices();
-  }, []);
+  }, [toast]);
 
   const value = {
     isWebcamActive,
@@ -78,7 +96,8 @@ export const TryOnProvider: React.FC<TryOnProviderProps> = ({ children }) => {
     availableShirts,
     isLoading,
     isPoseDetectionSupported,
-    errorMessage
+    errorMessage,
+    resetCameraError
   };
 
   return <TryOnContext.Provider value={value}>{children}</TryOnContext.Provider>;

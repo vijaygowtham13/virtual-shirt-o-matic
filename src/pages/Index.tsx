@@ -14,7 +14,7 @@ const Index = () => {
         
         <main className="flex-grow">
           {/* Hero Section */}
-          <section className="relative py-20 px-6 md:px-8 overflow-hidden">
+          <section className="relative py-20 px-6 md:px-8 overflow-hidden" id="try-on-section">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(120,190,255,0.1),transparent_55%)]"></div>
             <div className="max-w-7xl mx-auto">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
@@ -34,10 +34,36 @@ const Index = () => {
                   </p>
                   
                   <div className="flex flex-wrap gap-4 pt-2">
-                    <button className="button-primary">
+                    <button 
+                      className="button-primary"
+                      onClick={() => {
+                        const element = document.getElementById('try-on-section');
+                        if (element) {
+                          element.scrollIntoView({ behavior: 'smooth' });
+                          // Add a small delay before activating the webcam
+                          setTimeout(() => {
+                            const context = document.querySelector('[data-context="TryOnContext"]');
+                            if (context) {
+                              const setWebcamActive = (context as any).__TryOnContext_setWebcamActive;
+                              if (typeof setWebcamActive === 'function') {
+                                setWebcamActive(true);
+                              }
+                            }
+                          }, 500);
+                        }
+                      }}
+                    >
                       Try It Now
                     </button>
-                    <button className="button-secondary">
+                    <button 
+                      className="button-secondary"
+                      onClick={() => {
+                        const element = document.getElementById('how-it-works');
+                        if (element) {
+                          element.scrollIntoView({ behavior: 'smooth' });
+                        }
+                      }}
+                    >
                       Learn More
                     </button>
                   </div>
@@ -53,8 +79,52 @@ const Index = () => {
             </div>
           </section>
           
+          {/* How It Works Section */}
+          <section className="py-20 px-6 md:px-8" id="how-it-works">
+            <div className="max-w-7xl mx-auto">
+              <div className="text-center mb-16 space-y-4">
+                <h2 className="text-3xl sm:text-4xl font-bold">How It Works</h2>
+                <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
+                  Our virtual try-on technology is simple to use and provides an immersive experience.
+                </p>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+                <div className="text-center space-y-4">
+                  <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto">
+                    <span className="text-primary text-2xl font-bold">1</span>
+                  </div>
+                  <h3 className="text-xl font-medium">Enable Your Camera</h3>
+                  <p className="text-muted-foreground">
+                    Allow camera access so our technology can visualize clothes on you in real-time.
+                  </p>
+                </div>
+                
+                <div className="text-center space-y-4">
+                  <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto">
+                    <span className="text-primary text-2xl font-bold">2</span>
+                  </div>
+                  <h3 className="text-xl font-medium">Select Your Clothing</h3>
+                  <p className="text-muted-foreground">
+                    Browse through our collection and choose items you'd like to try on.
+                  </p>
+                </div>
+                
+                <div className="text-center space-y-4">
+                  <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto">
+                    <span className="text-primary text-2xl font-bold">3</span>
+                  </div>
+                  <h3 className="text-xl font-medium">See Results Instantly</h3>
+                  <p className="text-muted-foreground">
+                    Our AI overlays the clothing on your body so you can see how it looks on you.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
+          
           {/* Features Section */}
-          <section className="py-20 px-6 md:px-8 bg-muted/30">
+          <section className="py-20 px-6 md:px-8 bg-muted/30" id="features">
             <div className="max-w-7xl mx-auto">
               <div className="text-center mb-16 space-y-4">
                 <h2 className="text-3xl sm:text-4xl font-bold">Revolutionary Features</h2>
@@ -103,6 +173,40 @@ const Index = () => {
                     Save your favorite looks and receive recommendations based on your style preferences.
                   </p>
                 </div>
+              </div>
+            </div>
+          </section>
+          
+          {/* Gallery Section */}
+          <section className="py-20 px-6 md:px-8" id="gallery">
+            <div className="max-w-7xl mx-auto">
+              <div className="text-center mb-16 space-y-4">
+                <h2 className="text-3xl sm:text-4xl font-bold">Gallery</h2>
+                <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
+                  See examples of our virtual try-on technology in action.
+                </p>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[1, 2, 3, 4, 5, 6].map((item) => (
+                  <div key={item} className="rounded-xl overflow-hidden shadow-sm border border-border/40 hover:shadow-md transition-all duration-300">
+                    <div className="aspect-video bg-muted relative overflow-hidden">
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <img 
+                          src={`/shirts/shirt${(item % 5) + 1}.png`} 
+                          alt={`Example ${item}`}
+                          className="object-contain max-h-full p-4" 
+                        />
+                      </div>
+                    </div>
+                    <div className="p-4">
+                      <h3 className="font-medium">User Example {item}</h3>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        See how this shirt looks on a real person using our virtual try-on feature.
+                      </p>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </section>
@@ -156,10 +260,36 @@ const Index = () => {
                     Join thousands of satisfied customers who have revolutionized the way they shop for clothes.
                   </p>
                   <div className="flex flex-wrap justify-center gap-4 pt-4">
-                    <button className="px-8 py-3 bg-white text-primary rounded-full font-medium hover:bg-white/90 transition-colors">
+                    <button 
+                      className="px-8 py-3 bg-white text-primary rounded-full font-medium hover:bg-white/90 transition-colors"
+                      onClick={() => {
+                        const tryOnSection = document.getElementById('try-on-section');
+                        if (tryOnSection) {
+                          tryOnSection.scrollIntoView({ behavior: 'smooth' });
+                          // Add a small delay before activating the webcam
+                          setTimeout(() => {
+                            const context = document.querySelector('[data-context="TryOnContext"]');
+                            if (context) {
+                              const setWebcamActive = (context as any).__TryOnContext_setWebcamActive;
+                              if (typeof setWebcamActive === 'function') {
+                                setWebcamActive(true);
+                              }
+                            }
+                          }, 500);
+                        }
+                      }}
+                    >
                       Try It Now
                     </button>
-                    <button className="px-8 py-3 bg-primary-foreground/10 text-white border border-white/30 rounded-full font-medium hover:bg-primary-foreground/20 transition-colors">
+                    <button 
+                      className="px-8 py-3 bg-primary-foreground/10 text-white border border-white/30 rounded-full font-medium hover:bg-primary-foreground/20 transition-colors"
+                      onClick={() => {
+                        const element = document.getElementById('how-it-works');
+                        if (element) {
+                          element.scrollIntoView({ behavior: 'smooth' });
+                        }
+                      }}
+                    >
                       Learn More
                     </button>
                   </div>
