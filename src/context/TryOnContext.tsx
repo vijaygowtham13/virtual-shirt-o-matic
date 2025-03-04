@@ -79,7 +79,7 @@ export const TryOnProvider: React.FC<TryOnProviderProps> = ({ children }) => {
             toast({
               title: "No Camera Detected",
               description: "We couldn't detect any cameras on your device. You'll be using demo mode.",
-              variant: "warning",
+              variant: "default", // Changed from "warning" to "default"
             });
           } else {
             console.log(`Found ${videoDevices.length} video input devices`);
