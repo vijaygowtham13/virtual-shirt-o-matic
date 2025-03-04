@@ -23,8 +23,9 @@ const VirtualTryOn: React.FC = () => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [useFallbackMode, setUseFallbackMode] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   
-  const { canvasRef, poseData, isLoading, startDetection, stopDetection } = usePoseDetection(videoRef);
+  const { canvasRef, poseData, isLoading, cameraReady, startDetection, stopDetection } = usePoseDetection(videoRef);
   
   // Load shirt image
   useEffect(() => {
@@ -37,7 +38,7 @@ const VirtualTryOn: React.FC = () => {
     };
   }, [currentShirtIndex, availableShirts]);
   
-  // Handle webcam
+  // Handle webcam with improved error handling and retry mechanism
   useEffect(() => {
     const startWebcam = async () => {
       if (!isWebcamActive) {
@@ -52,79 +53,133 @@ const VirtualTryOn: React.FC = () => {
       resetCameraError();
       
       try {
+        console.log('Attempting to access camera...');
+        
+        // First try with ideal settings
         const videoStream = await navigator.mediaDevices.getUserMedia({ 
           video: { 
             width: { ideal: 1280 },
             height: { ideal: 720 },
             facingMode: "user"
-          } 
+          },
+          audio: false
         });
+        
+        console.log('Camera access successful');
         
         if (videoRef.current) {
           videoRef.current.srcObject = videoStream;
           setStream(videoStream);
+          videoRef.current.style.display = 'block'; // Make sure video is visible
           
           // Wait for video to start playing
           videoRef.current.onloadedmetadata = () => {
-            videoRef.current?.play().catch(error => {
-              console.error("Error playing video:", error);
-              toast({
-                title: "Camera Error",
-                description: "There was a problem starting your camera stream. Please try again.",
-                variant: "destructive",
+            console.log('Video metadata loaded, starting playback');
+            if (videoRef.current) {
+              videoRef.current.play().then(() => {
+                console.log('Video playback started successfully');
+                startDetection();
+                setUseFallbackMode(false);
+              }).catch(error => {
+                console.error("Error playing video:", error);
+                setUseFallbackMode(true);
+                toast({
+                  title: "Camera Error",
+                  description: "There was a problem starting your camera stream. Using fallback mode.",
+                  variant: "destructive",
+                });
               });
-            });
-            startDetection();
+            }
           };
         }
       } catch (error) {
         console.error("Error accessing webcam:", error);
         
-        // Show toast with error
-        toast({
-          title: "Camera Not Available",
-          description: "Couldn't access your camera. Using demo mode instead.",
-          variant: "destructive",
-        });
-        
-        setUseFallbackMode(true);
-        
-        // If we can't access the camera, we'll use a fallback mode
-        if (canvasRef.current) {
-          const ctx = canvasRef.current.getContext('2d');
-          if (ctx) {
-            canvasRef.current.width = 640;
-            canvasRef.current.height = 480;
+        // Try with lower resolution if we haven't already retried too many times
+        if (retryCount < 2) {
+          setRetryCount(prev => prev + 1);
+          console.log(`Retrying with lower resolution (attempt ${retryCount + 1})...`);
+          
+          try {
+            const fallbackStream = await navigator.mediaDevices.getUserMedia({ 
+              video: { 
+                width: { ideal: 640 },
+                height: { ideal: 480 }
+              },
+              audio: false
+            });
             
-            // Draw a placeholder background
-            ctx.fillStyle = '#f0f0f0';
-            ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+            if (videoRef.current) {
+              videoRef.current.srcObject = fallbackStream;
+              setStream(fallbackStream);
+              
+              videoRef.current.onloadedmetadata = () => {
+                videoRef.current?.play().then(() => {
+                  startDetection();
+                  setUseFallbackMode(false);
+                }).catch(err => {
+                  console.error("Fallback camera error:", err);
+                  setUseFallbackMode(true);
+                });
+              };
+            }
+          } catch (fallbackError) {
+            console.error("Fallback camera access failed:", fallbackError);
+            setUseFallbackMode(true);
             
-            // Draw a silhouette
-            ctx.fillStyle = '#d0d0d0';
-            const centerX = canvasRef.current.width / 2;
-            ctx.beginPath();
-            ctx.ellipse(centerX, 120, 50, 60, 0, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.beginPath();
-            ctx.moveTo(centerX - 80, 200);
-            ctx.lineTo(centerX + 80, 200);
-            ctx.lineTo(centerX + 100, 400);
-            ctx.lineTo(centerX - 100, 400);
-            ctx.closePath();
-            ctx.fill();
-            
-            // Overlay the current shirt
-            if (shirtImageRef.current) {
-              const shirtWidth = 200;
-              const shirtHeight = shirtWidth * (shirtImageRef.current.height / shirtImageRef.current.width);
-              ctx.drawImage(
-                shirtImageRef.current,
-                centerX - shirtWidth / 2,
-                180,
-                shirtWidth,
-                shirtHeight
-              );
+            toast({
+              title: "Camera Not Available",
+              description: "Could not access your camera. Using demo mode instead.",
+              variant: "destructive",
+            });
+          }
+        } else {
+          // If retries failed, use fallback mode
+          setUseFallbackMode(true);
+          
+          toast({
+            title: "Camera Not Available",
+            description: "Couldn't access your camera. Using demo mode instead.",
+            variant: "destructive",
+          });
+          
+          // If we can't access the camera, we'll use a fallback mode
+          if (canvasRef.current) {
+            const ctx = canvasRef.current.getContext('2d');
+            if (ctx) {
+              canvasRef.current.width = 640;
+              canvasRef.current.height = 480;
+              
+              // Draw a placeholder background
+              ctx.fillStyle = '#f0f0f0';
+              ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+              
+              // Draw a silhouette
+              ctx.fillStyle = '#d0d0d0';
+              const centerX = canvasRef.current.width / 2;
+              ctx.beginPath();
+              ctx.ellipse(centerX, 120, 50, 60, 0, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.beginPath();
+              ctx.moveTo(centerX - 80, 200);
+              ctx.lineTo(centerX + 80, 200);
+              ctx.lineTo(centerX + 100, 400);
+              ctx.lineTo(centerX - 100, 400);
+              ctx.closePath();
+              ctx.fill();
+              
+              // Overlay the current shirt
+              if (shirtImageRef.current) {
+                const shirtWidth = 200;
+                const shirtHeight = shirtWidth * (shirtImageRef.current.height / shirtImageRef.current.width);
+                ctx.drawImage(
+                  shirtImageRef.current,
+                  centerX - shirtWidth / 2,
+                  180,
+                  shirtWidth,
+                  shirtHeight
+                );
+              }
             }
           }
         }
@@ -139,7 +194,7 @@ const VirtualTryOn: React.FC = () => {
         stream.getTracks().forEach(track => track.stop());
       }
     };
-  }, [isWebcamActive, startDetection, stopDetection, toast, resetCameraError]);
+  }, [isWebcamActive, startDetection, stopDetection, toast, resetCameraError, retryCount]);
   
   // Draw shirt on canvas in fallback mode
   useEffect(() => {
@@ -185,12 +240,12 @@ const VirtualTryOn: React.FC = () => {
       if (!ctx) return;
       
       // Re-draw video frame
-      if (videoRef.current) {
+      if (videoRef.current && videoRef.current.readyState === 4) {
         ctx.drawImage(videoRef.current, 0, 0, canvasRef.current.width, canvasRef.current.height);
+        
+        // Overlay shirt
+        overlayShirt(canvasRef.current, poseData, shirtImageRef.current);
       }
-      
-      // Overlay shirt
-      overlayShirt(canvasRef.current, poseData, shirtImageRef.current);
     }
   }, [poseData, useFallbackMode]);
   
@@ -204,6 +259,20 @@ const VirtualTryOn: React.FC = () => {
     } else {
       setCurrentShirtIndex((currentShirtIndex - 1 + availableShirts.length) % availableShirts.length);
     }
+  };
+  
+  // Add retry button for camera issues
+  const handleRetryCamera = () => {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      setStream(null);
+    }
+    setRetryCount(0);
+    setUseFallbackMode(false);
+    setWebcamActive(false);
+    setTimeout(() => {
+      setWebcamActive(true);
+    }, 500);
   };
   
   return (
@@ -250,6 +319,7 @@ const VirtualTryOn: React.FC = () => {
               muted
               playsInline
               style={{ display: 'none' }}
+              autoPlay
             />
             <canvas 
               ref={canvasRef}
@@ -261,6 +331,27 @@ const VirtualTryOn: React.FC = () => {
                 <div className="space-y-4 text-center">
                   <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-rotation mx-auto"></div>
                   <p className="text-foreground">Initializing pose detection...</p>
+                </div>
+              </div>
+            )}
+            
+            {/* Camera Retry Button - Added for better UX */}
+            {!isLoading && !cameraReady && !useFallbackMode && (
+              <div className="absolute inset-0 bg-background/50 backdrop-blur-sm flex flex-col items-center justify-center">
+                <div className="space-y-6 text-center p-6">
+                  <p className="text-foreground text-lg">Camera not detected properly</p>
+                  <button 
+                    className="button-primary px-6 py-2"
+                    onClick={handleRetryCamera}
+                  >
+                    Retry Camera
+                  </button>
+                  <button 
+                    className="button-secondary px-6 py-2"
+                    onClick={() => setUseFallbackMode(true)}
+                  >
+                    Use Demo Mode
+                  </button>
                 </div>
               </div>
             )}
@@ -309,6 +400,7 @@ const VirtualTryOn: React.FC = () => {
                 onClick={() => {
                   setWebcamActive(false);
                   setUseFallbackMode(false);
+                  setRetryCount(0);
                 }}
                 className="p-3 bg-background/80 backdrop-blur-sm rounded-full border border-border/50 hover:bg-background transition-colors"
               >

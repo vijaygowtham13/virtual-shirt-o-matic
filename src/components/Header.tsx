@@ -18,7 +18,10 @@ const Header: React.FC = () => {
     const tryOnSection = document.getElementById('try-on-section');
     if (tryOnSection) {
       tryOnSection.scrollIntoView({ behavior: 'smooth' });
-      setWebcamActive(true);
+      // Give the browser a moment to scroll before activating
+      setTimeout(() => {
+        setWebcamActive(true);
+      }, 300);
     }
   };
   

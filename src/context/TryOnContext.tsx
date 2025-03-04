@@ -50,11 +50,14 @@ export const TryOnProvider: React.FC<TryOnProviderProps> = ({ children }) => {
     setIsPoseDetectionSupported(true);
   };
 
-  // Check browser support for webcam
+  // Check browser support for webcam with more detailed logging
   useEffect(() => {
     const checkMediaDevices = async () => {
       try {
+        console.log("Checking media devices support...");
+        
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          console.error("Browser doesn't support getUserMedia API");
           setIsPoseDetectionSupported(false);
           setErrorMessage("Your browser doesn't support webcam access.");
           
@@ -66,10 +69,31 @@ export const TryOnProvider: React.FC<TryOnProviderProps> = ({ children }) => {
           return;
         }
         
+        // Check if the user has previously denied camera permissions
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const videoDevices = devices.filter(device => device.kind === 'videoinput');
+          
+          if (videoDevices.length === 0) {
+            console.warn("No video input devices found");
+            toast({
+              title: "No Camera Detected",
+              description: "We couldn't detect any cameras on your device. You'll be using demo mode.",
+              variant: "warning",
+            });
+          } else {
+            console.log(`Found ${videoDevices.length} video input devices`);
+          }
+        } catch (enumError) {
+          console.error("Error enumerating devices:", enumError);
+          // This error is not critical, so we'll continue
+        }
+        
         // Here we're just checking if the browser supports getUserMedia
         // We'll handle actual camera permissions in the VirtualTryOn component
         setIsPoseDetectionSupported(true);
         setErrorMessage(null);
+        console.log("Media devices are supported");
       } catch (error) {
         console.error("Camera access error:", error);
         setIsPoseDetectionSupported(false);
